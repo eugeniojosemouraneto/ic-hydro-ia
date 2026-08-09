@@ -9,6 +9,10 @@ __pycache__/
 *$py.class
 *.so
 
+# Documentação da API Hydrobr
+.documentacao_hydroBr/
+documentacao_hydroBr/
+
 # Ambientes Virtuais (caso rode algo fora do Docker)
 .venv/
 venv/
