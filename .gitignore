@@ -1,0 +1,39 @@
+# Variaveis de ambiente e segredos
+.env
+.env.*
+*.env
+
+# Cache do Python e arquivos compilados
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Ambientes Virtuais (caso rode algo fora do Docker)
+.venv/
+venv/
+ENV/
+env/
+
+# Banco de dados local SQLite / dumps temporarios
+*.sqlite3
+*.db
+
+# Arquivos estaticos e de media gerados pelo Django
+staticfiles/
+media/
+
+# Logs e dados temporarios do sistema
+*.log
+.DS_Store
+Thumbs.db
+
+# IDEs e Editores de codigo
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker / Coleta de dados local (opcional)
+.docker/
+postgres_data/
