@@ -30,14 +30,14 @@ class StationPipeline:
         # Etapa 1.0. - Extração, executa a conexão com a agência ANA e retorna um pandas DataFrame.
         dataframe_api_stations: pandas.DataFrame = hydrobr.get_data.ANA.list_prec_stations(source='ANAF')
 
-        logger.info(f"[ INFO ] Extração DataFrame API Stations: {dataframe_api_stations.size()} elementos.")
+        logger.info(f"[ INFO ] Extração DataFrame API Stations: {dataframe_api_stations.size} elementos.")
 
         # Etapa 2.0. - Conjunto (set[str]) dos códigos de estações da API.
-        set_api_stations: set[str] = set(dataframe_api_stations.index.astype(str))
+        set_api_stations: set[str] = set(dataframe_api_stations['Code'].astype(str))
 
         # Etapa 3.0. - Conjunto (set[str]) dos códigos de estação do Banco de dados.
         set_database_stations: set[str] = set(
-            Station.objects.values_list('code', flag=True)
+            Station.objects.values_list('code', flat=True)
         ) 
 
         logger.info(f"[ INFO ] Extração Conjunto Banco de Dados Stations: {len(set_database_stations)} elementos.")
@@ -55,9 +55,11 @@ class StationPipeline:
         del set_database_stations
 
         # Etapa 6.0. - Separa do DataFrame original vindo da API os dados das estações inéditas.
-        dataframe_unreleased_stations: pandas.DataFrame = dataframe_api_stations[dataframe_api_stations.index.isin(set_unreleased_codes)].copy()
+        dataframe_unreleased_stations: pandas.DataFrame = dataframe_api_stations[
+            dataframe_api_stations['Code'].astype(str).isin(set_unreleased_codes)
+        ].copy()
 
-        logger.info(f"[ INFO ] Aquisição Dataframe Stations ineditas: {dataframe_unreleased_stations.size()} elementos.")
+        logger.info(f"[ INFO ] Aquisição Dataframe Stations ineditas: {dataframe_unreleased_stations.size} elementos.")
 
         # Etapas 7.0. e 8.0. - Descarte da memória o DataFrame original vindo da API e o conjunto da API.
         del dataframe_api_stations
@@ -67,6 +69,7 @@ class StationPipeline:
         valid_stations_instances: list[Station] = []
 
         for station_code, row_data in dataframe_unreleased_stations.iterrows():
+            station_code: str = str(row_data.get('Code'))
             lat: float = row_data.get('Latitude')
             lon: float = row_data.get('Longitude')
 
@@ -87,7 +90,7 @@ class StationPipeline:
 
             valid_stations_instances.append(
                 Station(
-                    code=str(station_code),
+                    code=station_code,
                     name=str(row_data.get('Name', 'Sem Nome')),
                     city=str(row_data.get('City', '')),
                     state=str(row_data.get('State', '')),

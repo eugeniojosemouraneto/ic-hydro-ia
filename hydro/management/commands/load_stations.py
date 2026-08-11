@@ -14,10 +14,12 @@ class Command(BaseCommand):
         try:
             new_stations: int = StationPipeline.populate_stations()
 
+            self.stdout.write(self.style.WARNING(f'{new_stations}'))
             if new_stations > 0:
                 self.stdout.write(self.style.SUCCESS(f'[SUCESSO] Pipeline finalizado! {new_stations} novas estações foram inseridas no banco PostGIS.'))
+
             else:
-                self.stdout.write(self.style.SUCCESS('[SUCESSO] Pipeline finalizado! O banco de dados já está 100% atualizado. Nenhuma estação inédita encontrada.'))
+                self.stdout.write(self.style.SUCCESS('[SUCESSO] Pipeline finalizado! O banco de dados já está completo. Nenhuma estação inédita encontrada.'))
 
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'[ERRO CRÍTICO] Falha na execução do pipeline: {str(e)}'))
