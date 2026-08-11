@@ -15,7 +15,7 @@ class Station(models.Model):
     station_type = models.CharField(max_length=50, null=True, blank=True, verbose_name="Tipo")
     sub_basin = models.CharField(max_length=100, null=True, blank=True, verbose_name="Sub-Bacia")
     city = models.CharField(max_length=100, null=True, blank=True, verbose_name="Cidade")
-    state = models.CharField(max_length=2, null=True, blank=True, verbose_name="Estado")
+    state = models.CharField(max_length=50, null=True, blank=True, verbose_name="Estado")
     responsible = models.CharField(max_length=150, null=True, blank=True, verbose_name="Responsável")
 
     # -----------------------------------------------------
