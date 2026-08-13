@@ -9,6 +9,10 @@ __pycache__/
 *$py.class
 *.so
 
+#Doc
+.doc/
+doc/
+
 # Documentação da API Hydrobr
 .documentacao_hydroBr/
 documentacao_hydroBr/
