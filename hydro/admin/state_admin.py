@@ -3,6 +3,6 @@ from hydro.models import State
 
 @admin.register(State)
 class StateAdmin(admin.ModelAdmin):
-    list_display = ('name', 'initials')
-    search_fields = ('name', 'initials')
+    list_display = ('name', )
+    search_fields = ('name', )
     ordering = ('name',)
