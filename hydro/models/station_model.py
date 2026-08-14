@@ -1,5 +1,7 @@
 from django.contrib.gis.db import models
 
+from .state_model import State
+
 class Station(models.Model):
     """
     Modelo para armazenar as Estações Meteorológicas/Pluviométricas vindas da ANA/hydrobr.
@@ -15,7 +17,7 @@ class Station(models.Model):
     station_type = models.CharField(max_length=50, null=True, blank=True, verbose_name="Tipo")
     sub_basin = models.CharField(max_length=100, null=True, blank=True, verbose_name="Sub-Bacia")
     city = models.CharField(max_length=100, null=True, blank=True, verbose_name="Cidade")
-    state = models.CharField(max_length=50, null=True, blank=True, verbose_name="Estado")
+    state = models.ForeignKey(State, on_delete=models.CASCADE, blank=True, null=True)
     responsible = models.CharField(max_length=150, null=True, blank=True, verbose_name="Responsável")
 
     # -----------------------------------------------------
