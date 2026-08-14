@@ -6,7 +6,7 @@ class State(models.Model):
     Meteorológico utilizando também para filtros de buscas.
     """
 
-    name = models.CharField(max_length=50, verbose_name="Estado")
+    name = models.CharField(max_length=50, verbose_name="Estado", unique=True)
 
     def __str__(self):
         return self.name
