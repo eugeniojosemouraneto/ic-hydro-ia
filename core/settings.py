@@ -130,6 +130,20 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Onde o Celery vai buscar as mensagens (Fila)
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/0')
+
+# Usar o próprio Redis para guardar o resultado temporário das tarefas (opcional, mas recomendado)
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+
+# Formato de troca de mensagens (JSON é o padrão e o mais seguro)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+
+# Fuso horário do Celery (herdando o fuso horário do Django)
+CELERY_TIMEZONE = TIME_ZONE
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
