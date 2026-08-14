@@ -1,13 +1,18 @@
 import traceback
+import logging
 from celery import shared_task
 from hydro.models import State, Station, PrecipitationRecord, TaskReport
 
+
+logger = logging.getLogger(__name__)
 
 @shared_task(bind=True)
 def run_precipitation_sync_pipeline(self, task_report_id, state_filter=None):
     """
     Pipeline principal para sincronização assíncrona de séries históricas pluviométricas.
     """
+
+    logger.info(f"[Início] Task disparada! ID do Relatório: {task_report_id} | Filtro de Estados: {state_filter}")
 
     try:
         report = TaskReport.objects.get(id=task_report_id)
@@ -20,9 +25,13 @@ def run_precipitation_sync_pipeline(self, task_report_id, state_filter=None):
         # identificação do trabalho
         
         report.save()
+
+        logger.info(f"[Auditoria] TaskReport ({task_report_id}) atualizado para PROCESSING. Celery Task ID: {self.request.id}")
         
 
     except TaskReport.DoesNotExist:
+        logger.error(f"[Erro] TaskReport com ID {task_report_id} não encontrado no banco de dados.")
+
         return "Error: TaskReport não encontrado."
 
     try:
@@ -30,41 +39,54 @@ def run_precipitation_sync_pipeline(self, task_report_id, state_filter=None):
             selected_states = State.objects.all()
             # Definição do Escopo (Filtro): Se a lista estiver vazia: O sistema consulta a entidade State e recupera todos os estados. 
 
+            logger.info("[Escopo] Nenhum filtro aplicado. Consultando ALL (todos os estados).")
+
         else:
             selected_states = State.objects.filter(name__in=state_filter)
             # Definição do Escopo (Filtro): Buscou no banco de dados todas as estações selecionadas.
+
+            logger.info(f"[Escopo] Filtro aplicado. Consultando apenas os estados: {state_filter}")
 
         station_queryset = Station.objects.filter(
             state__in=selected_states
         )
         # Estações meteorologicas dentro dos estados selecionados
 
-        set_station_codes: list[str] = list(station_queryset.values_list('code', flat=True))
+        list_station_codes: list[str] = list(station_queryset.values_list('code', flat=True))
         # Conjunto de codigos das estações
+
+        logger.info(f"[Extração] Encontradas {len(list_station_codes)} estações vinculadas a esses estados.")
 
         del selected_states
         # Liberando espaço de memoria
 
-        if not set_station_codes:
+        if not list_station_codes:
             report.status = TaskReport.StatusChoices.SUCCESS
             report.result_message = "Nenhuma estação encontrada para os estados informados."
             report.save()
+
+            logger.warning("[Fim] Nenhuma estação para processar. Encerrando pipeline prematuramente.")
+
             return report.result_message
 
         CHUNK_SIZE: int = 3
 
         batches = [
-            set_station_codes[i:i+CHUNK_SIZE] for i in range(0, len(set_station_codes), CHUNK_SIZE)
+            list_station_codes[i:i+CHUNK_SIZE] for i in range(0, len(list_station_codes), CHUNK_SIZE)
         ]
         # Separação de cada lote
 
-        print(f"Há {len(batches)} lotes para processamento.")
+        logger.info(f"[Particionamento] As {len(list_station_codes)} estações foram divididas em {len(batches)} lotes (chunks) de {CHUNK_SIZE}.")
 
         for batch in batches:
             # Chamada do service de processamento que comunica com o hydrobr
             pass
 
+        logger.info("[Sucesso] Todos os lotes foram despachados com sucesso!")
+
     except Exception as e:
+        logger.error(f"[Falha Crítica] O pipeline quebrou com a seguinte exceção: {str(e)}")
+        
         if 'report' in locals():
             report.status = TaskReport.StatusChoices.FAILED
             report.error_log = traceback.format_exc()
