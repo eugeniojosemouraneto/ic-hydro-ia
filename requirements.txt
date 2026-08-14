@@ -4,3 +4,5 @@ hydrobr
 pandas
 requests
 python-dotenv
+celery>=5.3.6
+redis>=5.0.1
