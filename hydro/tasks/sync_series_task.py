@@ -2,6 +2,7 @@ import traceback
 import logging
 from celery import shared_task
 from hydro.models import State, Station, PrecipitationRecord, TaskReport
+from hydro.service import  fetch_and_process_precipitation
 
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,8 @@ def run_precipitation_sync_pipeline(self, task_report_id, state_filter=None):
     """
     Pipeline principal para sincronização assíncrona de séries históricas pluviométricas.
     """
+    print(f"Log [ hydro/tasks/sync_series_task.py - metodo run_+precipitation_sync_pipeline ] - Inicio")
+
 
     logger.info(f"[Início] Task disparada! ID do Relatório: {task_report_id} | Filtro de Estados: {state_filter}")
 
@@ -74,15 +77,38 @@ def run_precipitation_sync_pipeline(self, task_report_id, state_filter=None):
         batches = [
             list_station_codes[i:i+CHUNK_SIZE] for i in range(0, len(list_station_codes), CHUNK_SIZE)
         ]
+
+        total_entered: int = 0
+        index: int = 0
+        
         # Separação de cada lote
 
         logger.info(f"[Particionamento] As {len(list_station_codes)} estações foram divididas em {len(batches)} lotes (chunks) de {CHUNK_SIZE}.")
 
         for batch in batches:
-            # Chamada do service de processamento que comunica com o hydrobr
-            pass
+            index += CHUNK_SIZE
+            # 5.1. Chamada do Serviço Externo (Encapsulado)
+            # Ele recebe [code1, code2, code3, code4] e devolve uma lista de dicionários prontos
+            processed_data_dicts = fetch_and_process_precipitation(batch, index)
+
+            if processed_data_dicts:
+                records_to_create = [PrecipitationRecord(**data) for data in processed_data_dicts]
+
+                PrecipitationRecord.objects.bulk_create(
+                    records_to_create,
+                    batch_size=2000,
+                    ignore_conflicts=True 
+                )
+
+                total_entered += len(records_to_create)
 
         logger.info("[Sucesso] Todos os lotes foram despachados com sucesso!")
+
+        report.status = TaskReport.StatusChoices.SUCCESS
+        report.result_message = f"Sincronização concluída com sucesso. {total_entered} novos registros pluviométricos inseridos."
+        report.save()
+
+        return report.result_message
 
     except Exception as e:
         logger.error(f"[Falha Crítica] O pipeline quebrou com a seguinte exceção: {str(e)}")
