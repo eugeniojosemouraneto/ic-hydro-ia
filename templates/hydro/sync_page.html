@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Sincronização de Séries - Hydro IA{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h4 class="mb-0 text-primary">Sincronização de Séries Pluviométricas</h4>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Selecione os estados que deseja processar. <br>
+                    <strong>Nota:</strong> Se nenhum estado for selecionado, o sistema processará <strong>TODOS</strong> os estados cadastrados.
+                </p>
+
+                <!-- Necessário para o Django aceitar a requisição POST via JavaScript -->
+                {% csrf_token %}
+
+                <form id="syncForm">
+                    <div class="mb-3">
+                        <label for="stateSelect" class="form-label fw-bold">Selecione os Estados (Segure Ctrl/Cmd para múltipla seleção):</label>
+                        <select multiple class="form-select" id="stateSelect" size="8">
+                            {% for state in states %}
+                                <option value="{{ state.name }}">{{ state.name }}</option>
+                            {% empty %}
+                                <option disabled>Nenhum estado cadastrado no banco.</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" id="startBtn" class="btn btn-primary btn-lg">
+                            Iniciar Sincronização
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Área de Feedback (Invisível no carregamento inicial) -->
+                <div id="statusArea" class="mt-4 d-none">
+                    <hr>
+                    <h5 id="statusTitle" class="text-info">Processando...</h5>
+                    
+                    <div class="progress mb-3" style="height: 25px;">
+                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    
+                    <div id="statusMessage" class="alert alert-secondary">
+                        Aguardando início do processo em segundo plano...
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('syncForm');
+    const startBtn = document.getElementById('startBtn');
+    const stateSelect = document.getElementById('stateSelect');
+    
+    const statusArea = document.getElementById('statusArea');
+    const statusTitle = document.getElementById('statusTitle');
+    const progressBar = document.getElementById('progressBar');
+    const statusMessage = document.getElementById('statusMessage');
+
+    // URLs injetadas pelo Django
+    const startUrl = "{% url 'hydro:start_sync_task' %}";
+    // Usamos '0' como curinga para substituir via JS depois
+    const statusUrlBase = "{% url 'hydro:check_task_status' 0 %}"; 
+
+    // Captura o token CSRF
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault(); // Impede o recarregamento da página
+
+        // Coleta os estados selecionados
+        const selectedStates = Array.from(stateSelect.selectedOptions).map(opt => opt.value);
+
+        // Altera a interface para o modo "Carregando"
+        startBtn.disabled = true;
+        stateSelect.disabled = true;
+        statusArea.classList.remove('d-none');
+        statusTitle.textContent = "Preparando...";
+        statusTitle.className = "text-info";
+        progressBar.classList.add('progress-bar-animated', 'bg-info');
+        progressBar.classList.remove('bg-success', 'bg-danger');
+        statusMessage.textContent = "Enviando requisição para a fila...";
+        statusMessage.className = "alert alert-secondary";
+
+        // Fase 3: Dispara o serviço via AJAX
+        fetch(startUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ states: selectedStates })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.task_report_id) {
+                statusMessage.textContent = "Tarefa adicionada à fila! O Celery está processando...";
+                
+                // Fase 4: Inicia o Long Polling
+                startPolling(data.task_report_id);
+            } else {
+                showError("Erro ao iniciar a tarefa.");
+            }
+        })
+        .catch(error => showError(error.message));
+    });
+
+    // Função de Long Polling (Consulta a cada 3 segundos)
+    function startPolling(reportId) {
+        const url = statusUrlBase.replace('/0/', `/${reportId}/`);
+        
+        const pollingInterval = setInterval(() => {
+            fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'PROCESSING') {
+                    statusTitle.textContent = "Processando Dados...";
+                    statusMessage.textContent = "O trabalhador em background está extraindo e processando os lotes.";
+                
+                } else if (data.status === 'SUCCESS') {
+                    clearInterval(pollingInterval); // Para de consultar
+                    statusTitle.textContent = "Concluído!";
+                    statusTitle.className = "text-success";
+                    progressBar.classList.remove('progress-bar-animated', 'bg-info');
+                    progressBar.classList.add('bg-success');
+                    statusMessage.textContent = data.result_message;
+                    statusMessage.className = "alert alert-success";
+                    
+                    // Libera o botão caso queira rodar de novo
+                    startBtn.disabled = false;
+                    stateSelect.disabled = false;
+                
+                } else if (data.status === 'FAILED') {
+                    clearInterval(pollingInterval); // Para de consultar
+                    showError(data.result_message || "Erro interno no worker do Celery.");
+                }
+            })
+            .catch(error => {
+                clearInterval(pollingInterval);
+                showError("Perda de conexão com o servidor ao consultar status.");
+            });
+            
+        }, 3000); // 3000 milissegundos = 3 segundos
+    }
+
+    // Função auxiliar para exibir erros
+    function showError(msg) {
+        statusTitle.textContent = "Falha no Processo";
+        statusTitle.className = "text-danger";
+        progressBar.classList.remove('progress-bar-animated', 'bg-info');
+        progressBar.classList.add('bg-danger');
+        statusMessage.textContent = msg;
+        statusMessage.className = "alert alert-danger";
+        
+        startBtn.disabled = false;
+        stateSelect.disabled = false;
+    }
+});
+</script>
+{% endblock %}

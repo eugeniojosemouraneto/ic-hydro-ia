@@ -1,4 +1,5 @@
 import json
+import uuid
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
@@ -29,10 +30,14 @@ def start_sync_task(request):
     """
     Recebe a requisição assíncrona (AJAX), cria o TaskReport e dispara o Celery.
     """
+    print(f"Log [ hydro/views/sync_view.py - metodo start_sync_task ] - Iniciando!")
+
     try:
         data = json.loads(request.body)
         
         selected_states = data.get('states', [])
+
+        print(f"Log [ hydro/views/sync_view.py - metodo start_sync_task ] - Aquisição dos estados\nStates: {selected_states}")
 
     except json.JSONDecodeError:
         return JsonResponse(
@@ -43,13 +48,16 @@ def start_sync_task(request):
         )
 
     report = TaskReport.objects.create(
+        task_id=str(uuid.uuid4()),
         task_name='Sincronização de Séries Pluviométricas',
         status=TaskReport.StatusChoices.PENDING,
         user=request.user if request.user.is_authenticated else None
     )
 
+    print(f"Log [ hydro/views/sync_view.py - metodo start_sync_task ] - Criado o report com sucesso!")
     # Despacha o trabalho para o Celery em segundo plano usando .delay()
     # Importante: A nossa Task já sabe que se selected_states for vazia, ela deve buscar todos os estados.
+    print(f"Log [ hydro/views/sync_view.py - metodo start_sync_task ] - Chamando a task run_precipitation_sync_pipeline")
     run_precipitation_sync_pipeline.delay(
         task_report_id=report.id,
         state_filter=selected_states
