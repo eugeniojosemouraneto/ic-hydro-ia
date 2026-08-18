@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}Mapa de Estações - Hydro IA{% endblock %}
+
+{% block extra_css %}
+<!-- CSS do Leaflet para o mapa -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<!-- CSS do Plugin MarkerCluster (Garante as cores e os círculos das bolhas) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+
+<style>
+    #map { height: 600px; width: 100%; border-radius: 8px; z-index: 1;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2 class="text-primary">Explorador de Estações Meteorológicas</h2>
+        <p class="text-muted">Filtre por estado e selecione uma estação no mapa para analisar sua série histórica.</p>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-6 d-flex gap-2">
+        <select id="stateFilter" class="form-select">
+            <option value="">Todos os Estados</option>
+            {% for state in states %}
+                <option value="{{ state.name }}">{{ state.name }}</option>
+            {% endfor %}
+        </select>
+        <button id="applyFilterBtn" class="btn btn-primary px-4">Filtrar</button>
+        <button id="clearFilterBtn" class="btn btn-outline-secondary px-4">Limpar</button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-body p-1">
+                <!-- Div onde o mapa será renderizado -->
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- JS do Leaflet -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- JS do Plugin MarkerCluster -->
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Inicializa o mapa centrado no Brasil
+    const map = L.map('map').setView([-14.2350, -51.9253], 4);
+    
+    // Adiciona a camada de mapa (OpenStreetMap)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // MUDANÇA AQUI: Trocamos o L.layerGroup() básico pelo L.markerClusterGroup()
+    let markersCluster = L.markerClusterGroup({
+        // Configurações opcionais para melhorar o visual do agrupamento
+        chunkedLoading: true,
+        maxClusterRadius: 50 // O padrão é 80. Valores menores criam mais bolhas em vez de uma bolha gigante
+    });
+    
+    // Adiciona a camada de cluster ao mapa
+    map.addLayer(markersCluster);
+
+    // 2. Função para buscar os dados na API e desenhar no mapa
+    function loadStations(state = '') {
+        const url = state ? `/hydro/api/stations/?state=${encodeURIComponent(state)}` : '/hydro/api/stations/';
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                // Limpa as bolhas/pinos antigos do mapa
+                markersCluster.clearLayers();
+                
+                // Cria um array temporário para armazenar todos os marcadores de uma vez (Melhora a performance)
+                let markerList = [];
+                
+                data.stations.forEach(station => {
+                    const marker = L.marker([station.lat, station.lng]);
+                    
+                    const detailUrl = `/hydro/estacao/${station.code}/`;
+                    
+                    const popupContent = `
+                        <div class="text-center">
+                            <h6 class="mb-1 fw-bold text-primary">${station.name}</h6>
+                            <p class="mb-2 text-muted" style="font-size: 0.85rem;">
+                                Código: ${station.code}<br>
+                                Local: ${station.city} - ${station.state}
+                            </p>
+                            <a href="${detailUrl}" class="btn btn-sm btn-primary w-100">
+                                Analisar Série Histórica
+                            </a>
+                        </div>
+                    `;
+                    
+                    marker.bindPopup(popupContent);
+                    // Adiciona o marcador à nossa lista temporária em vez de jogar direto no mapa
+                    markerList.push(marker);
+                });
+                
+                // Adiciona todos os marcadores de uma vez só à camada de cluster
+                markersCluster.addLayers(markerList);
+            })
+            .catch(error => console.error('Erro ao buscar estações:', error));
+    }
+
+    // 3. Eventos dos Botões de Filtro
+    document.getElementById('applyFilterBtn').addEventListener('click', () => {
+        const state = document.getElementById('stateFilter').value;
+        loadStations(state);
+    });
+
+    document.getElementById('clearFilterBtn').addEventListener('click', () => {
+        document.getElementById('stateFilter').value = '';
+        loadStations('');
+    });
+
+    // 4. Carrega tudo ao abrir a página
+    loadStations('');
+});
+</script>
+{% endblock %}
