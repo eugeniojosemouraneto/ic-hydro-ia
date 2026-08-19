@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from hydro.pipelines import StationPipeline
+from hydro.pipelines import StationANAPipeline, StationINMETPipeline
 
 
 class Command(BaseCommand):
@@ -12,14 +12,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING('Iniciando comunicação com a API da hydrobr... Isso pode levar alguns segundos.'))
         
         try:
-            new_stations: int = StationPipeline.populate_stations()
 
-            self.stdout.write(self.style.WARNING(f'{new_stations}'))
-            if new_stations > 0:
-                self.stdout.write(self.style.SUCCESS(f'[SUCESSO] Pipeline finalizado! {new_stations} novas estações foram inseridas no banco PostGIS.'))
+            StationANAPipeline.populate_ana_stations()
 
-            else:
-                self.stdout.write(self.style.SUCCESS('[SUCESSO] Pipeline finalizado! O banco de dados já está completo. Nenhuma estação inédita encontrada.'))
+            StationINMETPipeline.match_inmet_stations()
 
+            self.stdout.write(self.style.SUCCESS(f'[SUCESSO] Pipeline finalizado!'))
+            
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'[ERRO CRÍTICO] Falha na execução do pipeline: {str(e)}'))

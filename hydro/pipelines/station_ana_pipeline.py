@@ -9,14 +9,14 @@ from hydro.models import Station
 # Configuração do Log de Sistema 
 logger = logging.getLogger('hydro_system')
 
-class StationPipeline:
+class StationANAPipeline:
     """
     Este pipeline vai administrar um fluxo de ETL (Extração, Transformação e Carga) 
     das estações meteorológicas da agência ANA. 
     """
 
     @staticmethod
-    def populate_stations() -> int:
+    def populate_ana_stations() -> int:
         """
         Executa a busca de estações na API, filtra as inéditas via conjuntos matemáticos,
         valida coordenadas espaciais e salva no banco de dados PostGIS.
