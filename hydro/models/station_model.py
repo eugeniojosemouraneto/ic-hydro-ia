@@ -7,12 +7,10 @@ class Station(models.Model):
     Modelo para armazenar as Estações Meteorológicas/Pluviométricas vindas da ANA/hydrobr.
     Utiliza PostGIS para armazenamento geoespacial.
     """
+
+    code_ana = models.CharField(max_length=20, primary_key=True, verbose_name="Código ANA")
+    code_inmet = models.CharField(max_length=20, null=True, blank=True, verbose_name="Código INMET")
     
-    # -----------------------------------------------------
-    # 1. Identificação e Localização Básica
-    # -----------------------------------------------------
-    # A API usa o 'Code' como identificador único. É perfeito para ser a Chave Primária.
-    code = models.CharField(max_length=20, primary_key=True, verbose_name="Código ANA")
     name = models.CharField(max_length=255, verbose_name="Nome da Estação")
     station_type = models.CharField(max_length=50, null=True, blank=True, verbose_name="Tipo")
     sub_basin = models.CharField(max_length=100, null=True, blank=True, verbose_name="Sub-Bacia")
@@ -20,18 +18,8 @@ class Station(models.Model):
     state = models.ForeignKey(State, on_delete=models.CASCADE, blank=True, null=True)
     responsible = models.CharField(max_length=150, null=True, blank=True, verbose_name="Responsável")
 
-    # -----------------------------------------------------
-    # 2. Dados Geoespaciais (PostGIS)
-    # -----------------------------------------------------
-    # Substitui as colunas isoladas de 'Latitude' e 'Longitude' do DataFrame.
-    # SRID 4326 é o padrão mundial (WGS 84), o mesmo usado pelo GPS e Google Maps.
     geom = models.PointField(srid=4326, verbose_name="Geometria (Lat/Lon)")
 
-    # -----------------------------------------------------
-    # 3. Metadados Temporais e Qualidade da Série (API)
-    # -----------------------------------------------------
-    # Como a API pode retornar valores nulos ou faltantes para estatísticas, 
-    # todos estes campos permitem null=True e blank=True.
     start_date = models.DateField(null=True, blank=True, verbose_name="Data Inicial (StartDate)")
     end_date = models.DateField(null=True, blank=True, verbose_name="Data Final (EndDate)")
     
@@ -40,9 +28,6 @@ class Station(models.Model):
     n_ywomd = models.FloatField(null=True, blank=True, verbose_name="Anos sem Falhas (N_YWOMD)")
     ywmd = models.FloatField(null=True, blank=True, verbose_name="Anos com Falhas (YWMD)")
 
-    # -----------------------------------------------------
-    # 4. Auditoria Interna do Sistema
-    # -----------------------------------------------------
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Criado no Sistema em")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última Atualização")
 
@@ -53,7 +38,8 @@ class Station(models.Model):
         ordering = ['state', 'name']
 
     def __str__(self):
-        return f"{self.code} - {self.name} ({self.state})"
+        inmet_str = f" | INMET: {self.code_inmet}" if self.code_inmet else ""
+        return f"ANA: {self.code_ana}{inmet_str} - {self.name}"
 
     # Propriedades auxiliares para facilitar o uso na sua interface Web ou API futura
     @property

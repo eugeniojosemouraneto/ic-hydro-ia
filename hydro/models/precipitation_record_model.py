@@ -3,6 +3,7 @@ from hydro.models.station_model import Station
 
 
 class PrecipitationRecord(models.Model):
+
     station = models.ForeignKey(
         Station,
         on_delete=models.CASCADE,
@@ -12,14 +13,25 @@ class PrecipitationRecord(models.Model):
     date = models.DateField(
         verbose_name='Data da Leitura'
     )
-    value = models.FloatField(
+
+    value_ana = models.FloatField(
         null=True,
         blank=True,
-        verbose_name='Precipitação (mm)'
+        verbose_name='Precipitação ANA (mm)'
     )
-    is_gap = models.BooleanField(
+    is_gap_ana = models.BooleanField(
         default=False,
-        verbose_name='Possui Falha?'
+        verbose_name='Falha ANA?'
+    )
+
+    value_inmet = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name='Precipitação INMET (mm)'
+    )
+    is_gap_inmet = models.BooleanField(
+        default=True, # Por padrão assumimos falha até o pipeline preencher
+        verbose_name='Falha INMET?'
     )
 
     class Meta:
@@ -27,18 +39,16 @@ class PrecipitationRecord(models.Model):
         verbose_name_plural = 'Registros Pluviométricos'
         ordering = ['-date']
         constraints = [
-            # Garante idempotência e impede duplicidade de data para a mesma estação
             models.UniqueConstraint(
                 fields=['station', 'date'],
                 name='unique_station_date_precipitation'
             )
         ]
         indexes = [
-            # Índices cruciais para acelerar a busca do último registro e consultas temporais
             models.Index(fields=['station', 'date']),
-            models.Index(fields=['is_gap']),
+            models.Index(fields=['is_gap_ana']),
+            models.Index(fields=['is_gap_inmet']),
         ]
 
     def __str__(self):
-        valor_str = f"{self.value} mm" if self.value is not None else "Sem dado"
-        return f"{self.station.code} | {self.date} | {valor_str}"
+        return f"{self.station.code_ana} | {self.date}"
