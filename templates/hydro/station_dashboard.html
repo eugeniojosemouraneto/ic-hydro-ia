@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard: {{ station.name }} - Hydro IA{% endblock %}
+
+{% block extra_css %}
+<!-- CSS do Leaflet para o mapa estático -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    /* Trava o tamanho do mapa para alinhar com a coluna de informações */
+    #static-map { height: 100%; min-height: 250px; border-radius: 8px; z-index: 1;}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Botão de Voltar -->
+<div class="row mb-3">
+    <div class="col-12">
+        <a href="{% url 'hydro:station_map_page' %}" class="btn btn-outline-secondary btn-sm">
+            &larr; Voltar para o Mapa de Estações
+        </a>
+    </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- ELEMENTO 1: INFORMAÇÕES PRINCIPAIS E MAPA ESTÁTICO                      -->
+<!-- ======================================================================= -->
+<div class="row mb-4 align-items-stretch">
+    <!-- Coluna 1: Informações da Estação -->
+    <div class="col-lg-6 mb-3 mb-lg-0">
+        <div class="card shadow-sm h-100 border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Informações Gerais</h5>
+            </div>
+            <div class="card-body">
+                <h3 class="card-title text-primary">{{ station.name }}</h3>
+                <h6 class="card-subtitle mb-4 text-muted">Código ANA: {{ station.code }}</h6>
+                
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <strong>Localização:</strong>
+                        <span>{{ station.city }} - {{ station.state.name }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <strong>Período Analisado:</strong>
+                        <span>{{ stats.start_date|date:"d/m/Y" }} a {{ stats.end_date|date:"d/m/Y" }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <strong>Total de Registros:</strong>
+                        <span class="badge bg-success rounded-pill fs-6">{{ stats.total_records }} dias</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <strong>Total de Falhas (Gaps):</strong>
+                        <span class="badge bg-danger rounded-pill fs-6">{{ stats.total_gaps }} dias</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coluna 2: Mapa Estático -->
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-body p-2">
+                <div id="static-map"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- ELEMENTO 2: SÉRIE HISTÓRICA (MINI DASHBOARD COM FILTROS)                -->
+<!-- ======================================================================= -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Série Histórica Pluviométrica</h5>
+            </div>
+            <div class="card-body bg-light">
+                
+                <!-- Formulário de Filtros (Envia requisição GET para a mesma View) -->
+                <form method="GET" class="row g-3 align-items-end mb-4">
+                    <div class="col-md-3">
+                        <label for="date" class="form-label fw-bold">Data Específica</label>
+                        <input type="date" class="form-control" id="date" name="date" value="{{ request.GET.date }}">
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="ordering" class="form-label fw-bold">Ordenação</label>
+                        <select class="form-select" id="ordering" name="ordering">
+                            <option value="-date" {% if request.GET.ordering == '-date' %}selected{% endif %}>Data (Mais recentes primeiro)</option>
+                            <option value="date" {% if request.GET.ordering == 'date' %}selected{% endif %}>Data (Mais antigas primeiro)</option>
+                            <option value="-is_gap" {% if request.GET.ordering == '-is_gap' %}selected{% endif %}>Falhas primeiro</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="form-check mt-md-4 mb-2">
+                            <input class="form-check-input" type="checkbox" id="only_gaps" name="only_gaps" value="true" {% if request.GET.only_gaps == 'true' %}checked{% endif %}>
+                            <label class="form-check-label fw-bold text-danger" for="only_gaps">
+                                Mostrar apenas Falhas
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary w-100">Aplicar Filtros</button>
+                    </div>
+                    
+                    <!-- Mantém a página de falhas atual ao aplicar filtros na série -->
+                    <input type="hidden" name="page_gaps" value="{{ request.GET.page_gaps|default:1 }}">
+                </form>
+
+                <!-- Tabela da Série -->
+                <div class="table-responsive bg-white rounded border">
+                    <table class="table table-hover text-center align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data da Leitura</th>
+                                <th>Precipitação (mm)</th>
+                                <th>Status de Integridade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in series_page %}
+                            <!-- Se for falha, pinta a linha de amarelo claro -->
+                            <tr class="{% if record.is_gap %}table-warning{% endif %}">
+                                <td>{{ record.date|date:"d/m/Y" }}</td>
+                                <td class="fw-bold">{% if record.value != None %}{{ record.value|floatformat:1 }}{% else %}-{% endif %}</td>
+                                <td>
+                                    {% if record.is_gap %}
+                                        <span class="badge bg-danger">Falha Detectada</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Dado Original</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-muted py-4">Nenhum registro encontrado para estes filtros.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paginação Série Histórica (Preserva todos os parâmetros GET atuais) -->
+                <nav class="mt-3">
+                  <ul class="pagination justify-content-center mb-0">
+                    {% if series_page.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page_series={{ series_page.previous_page_number }}&page_gaps={{ request.GET.page_gaps|default:1 }}&date={{ request.GET.date|default:'' }}&only_gaps={{ request.GET.only_gaps|default:'' }}&ordering={{ request.GET.ordering|default:'-date' }}">Anterior</a></li>
+                    {% endif %}
+                    
+                    <li class="page-item disabled"><span class="page-link">Página {{ series_page.number }} de {{ series_page.paginator.num_pages }}</span></li>
+                    
+                    {% if series_page.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page_series={{ series_page.next_page_number }}&page_gaps={{ request.GET.page_gaps|default:1 }}&date={{ request.GET.date|default:'' }}&only_gaps={{ request.GET.only_gaps|default:'' }}&ordering={{ request.GET.ordering|default:'-date' }}">Próxima</a></li>
+                    {% endif %}
+                  </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- ELEMENTO 3: TABELA DE AUDITORIA EXCLUSIVA PARA FALHAS                   -->
+<!-- ======================================================================= -->
+<div class="row mb-5">
+    <div class="col-12">
+        <div class="card shadow-sm border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">Auditoria Rápida: Apenas Falhas (Gaps)</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Esta tabela isola todos os dias onde não houve coleta de dados. Será o foco da próxima fase (Preenchimento por IA/Métodos Estatísticos).</p>
+                
+                <div class="table-responsive rounded border">
+                    <table class="table table-bordered text-center align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 30%;">Data da Leitura</th>
+                                <th>Ação Necessária do Sistema</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for gap in gaps_page %}
+                            <tr>
+                                <td class="text-danger fw-bold">{{ gap.date|date:"d/m/Y" }}</td>
+                                <td class="text-muted"><small>Aguardando rotina de preenchimento (Interpolação / RNA)</small></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-success fw-bold py-4">Excelente! Nenhuma falha encontrada nesta estação.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paginação Exclusiva das Falhas -->
+                <nav class="mt-3">
+                  <ul class="pagination justify-content-center mb-0">
+                    {% if gaps_page.has_previous %}
+                    <li class="page-item"><a class="page-link text-danger" href="?page_gaps={{ gaps_page.previous_page_number }}&page_series={{ request.GET.page_series|default:1 }}&date={{ request.GET.date|default:'' }}&only_gaps={{ request.GET.only_gaps|default:'' }}&ordering={{ request.GET.ordering|default:'-date' }}">Anterior</a></li>
+                    {% endif %}
+                    
+                    <li class="page-item disabled"><span class="page-link">Página {{ gaps_page.number }} de {{ gaps_page.paginator.num_pages }}</span></li>
+                    
+                    {% if gaps_page.has_next %}
+                    <li class="page-item"><a class="page-link text-danger" href="?page_gaps={{ gaps_page.next_page_number }}&page_series={{ request.GET.page_series|default:1 }}&date={{ request.GET.date|default:'' }}&only_gaps={{ request.GET.only_gaps|default:'' }}&ordering={{ request.GET.ordering|default:'-date' }}">Próxima</a></li>
+                    {% endif %}
+                  </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- JS do Leaflet para o mapa estático -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Utilizamos stringformat para converter vírgulas do Python em pontos no JavaScript
+        const lat = parseFloat("{{ station.latitude|stringformat:'f' }}");
+        const lng = parseFloat("{{ station.longitude|stringformat:'f' }}");
+
+        // Verifica se a estação possui coordenadas válidas antes de criar o mapa
+        if (!isNaN(lat) && !isNaN(lng)) {
+            const staticMap = L.map('static-map', {
+                zoomControl: true,
+                dragging: false, // Desativa arraste para não interferir na rolagem da página web
+                scrollWheelZoom: false // Desativa o zoom no scroll do mouse
+            }).setView([lat, lng], 11);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(staticMap);
+
+            L.marker([lat, lng]).addTo(staticMap)
+                .bindPopup("<b>{{ station.name }}</b><br>Código: {{ station.code }}").openPopup();
+        } else {
+            document.getElementById('static-map').innerHTML = "<p class='text-center mt-5 text-muted'>Coordenadas não disponíveis</p>";
+        }
+    });
+</script>
+{% endblock %}
