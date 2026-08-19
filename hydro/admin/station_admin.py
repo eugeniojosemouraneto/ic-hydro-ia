@@ -6,8 +6,9 @@ from hydro.models import Station
 class StationAdmin(GISModelAdmin):
     """
     Configuração do painel administrativo para as Estações com PostGIS.
+    Agora exibe a identificação unificada (ANA e INMET).
     """
-    list_display = ('code', 'name', 'state', 'city', 'station_type', 'latitude', 'longitude')
-    search_fields = ('code', 'name', 'city')
+    list_display = ('code_ana', 'code_inmet', 'name', 'state', 'city', 'station_type', 'latitude', 'longitude')
+    search_fields = ('code_ana', 'code_inmet', 'name', 'city')
     list_filter = ('state', 'station_type')
     ordering = ('state', 'name')
